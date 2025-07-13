@@ -1,0 +1,6 @@
+[submodule "mak"]
+	path = mak
+	url = git@github.com:jimbelton/mak.git
+[submodule "libkit"]
+	path = libkit
+	url = git@github.com:cisco-open/libkit.git
