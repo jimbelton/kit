@@ -1,0 +1,59 @@
+#!/bin/sh
+
+set -e
+
+usage() {
+    echo "Usage: autobuild [-SC]" >&2
+    echo "       -C => Don't 'make clean'" >&2
+    echo "       -S => Run jenkins static analysis" >&2
+    exit 1
+}
+
+logrun() {
+    log=output/log/$1
+    shift
+    { "$@" 2>&1 || echo Exit: $? >output/failed; } | tee $log
+    [ ! -f output/failed ] || { cat output/failed | tee -a $log; rm output/failed; false; }
+}
+
+noclean= sonar=
+while getopts :SC c
+do
+    case "$c" in
+    C)  noclean=TRUE;;
+    S)  sonar=TRUE;;
+    *)  usage;;
+    esac
+done
+
+cd libkit
+[ "$noclean" ] || make clean
+make debug test
+make coverage test
+make release test
+make convention
+make package
+
+cd ..
+rm -f output
+ln -s libkit/output output
+mkdir -p output/tap output/log
+
+{
+    echo echo Gathering TAP output
+    find . \( -name \*.t.out -o -name \*.pl.out \) \
+         ! -name test-sxe-hash-bench.t.out \
+         ! -name test-lookup3.t.out \
+    | grep -v libsxe.*spawn \
+    | while read name
+    do
+        tgt=output/tap/$(echo ${name#./} | sed s,/,-,g).tap
+        echo rm -f $tgt
+        echo ln $name $tgt
+    done
+} | logrun gather-tap-output.log sh -e
+
+if [ "$sonar" ]
+then
+    ./sonar-scan -J
+fi
